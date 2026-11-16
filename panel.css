@@ -1,0 +1,27 @@
+:root{font:14px/1.5 system-ui,sans-serif;color:#192335;background:#fff;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr)}
+header{padding:16px;border-bottom:1px solid #e2e7ee}
+.title,form,.progress-label{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.title,.progress-label{justify-content:space-between}
+h1{font-size:18px;margin:0;letter-spacing:-.015em}
+form{margin:16px 0 12px}
+button,input{min-height:34px;font:inherit;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:inherit;padding:4px 10px}
+input{width:76px;padding:4px 7px;font-variant-numeric:tabular-nums}
+button{cursor:pointer}
+button:hover:not(:disabled){background:#eef4ff}
+button:disabled{color:#64748b;background:#f4f6f9;cursor:default}
+button:focus-visible,input:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+#copy{color:#16429f}
+#copy:disabled{color:#64748b}
+.primary{background:#1e55c7;color:#fff;border-color:#1e55c7}
+.primary:hover:not(:disabled){background:#16429f}
+progress{display:block;width:100%;height:8px;margin:8px 0 6px;accent-color:#2563eb}
+output{font-variant-numeric:tabular-nums}
+small,#empty{color:#526177}
+#message{color:#40516a;margin:6px 0 0;overflow-wrap:anywhere}
+main{overflow:auto;overscroll-behavior:contain}
+#empty{margin:22px 16px}
+ol{margin:0;padding:0;list-style:none}
+li{padding:10px 16px;border-bottom:1px solid #e7ebf0;overflow-wrap:anywhere;white-space:pre-wrap}
+[hidden]{display:none!important}

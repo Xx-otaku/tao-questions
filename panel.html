@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>问大家采集</title>
+<link rel="stylesheet" href="panel.css">
+<header>
+  <div class="title"><h1>问大家采集</h1><button id="copy" disabled>一键复制</button></div>
+  <form id="controls">
+    <label for="target">目标条数</label>
+    <input id="target" type="number" value="100" min="1" step="1" required>
+    <button id="primary" class="primary" type="submit">开始</button>
+    <button id="stop" type="button" hidden>停止</button>
+  </form>
+  <div class="progress-label"><strong id="status">等待开始</strong><output id="count">0 / 100</output></div>
+  <progress id="progress" value="0" max="100" aria-label="采集进度"></progress>
+  <small id="stats" hidden></small>
+  <p id="message" role="status">请在淘宝搜索结果页按销量排序后开始。</p>
+</header>
+<main aria-label="已采集的问题">
+  <p id="empty">采集到的问题会按顺序出现在这里。</p>
+  <ol id="questions"></ol>
+</main>
+<script type="module" src="panel.js"></script>
+</html>
