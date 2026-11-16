@@ -36,8 +36,20 @@ async function inspect(tabId, step, scroll = false, expectedItem) {
   }
   await chrome.scripting.executeScript({target:{tabId}, files:['page.js']});
   const [frame] = await chrome.scripting.executeScript({
-    target:{tabId}, func:(action, move) => globalThis.inspectTaobao(action, move), args:[step, scroll]
+    target:{tabId}, func:async (action, move) => {
+      const pageUrl = location.href;
+      return {...await globalThis.inspectTaobao(action, move), pageUrl};
+    }, args:[step, scroll]
   });
+  if (expectedItem && frame.result?.rows) {
+    const current = new URL(frame.result.pageUrl || tab.url);
+    if (current.protocol !== 'https:' || !allowed.includes(current.hostname) ||
+        current.pathname !== '/item.htm' || current.searchParams.get('id') !== expectedItem) {
+      return {error:'当前页面与采集商品不一致，请检查商品详情。'};
+    }
+    frame.result.source = {productId:expectedItem, title:frame.result.productTitle, titleChecked:3,
+      url:current.origin + '/item.htm?id=' + expectedItem};
+  }
   return frame.result;
 }
 
@@ -50,6 +62,7 @@ function finishProduct(task, skipped) {
   if (skipped) task.noQuestions++;
   task.item = null;
   task.rows = [];
+  task.offset = 0;
   task.waits = 0;
   task.bottomChecks = 0;
   task.phase = 'search';
@@ -92,7 +105,7 @@ async function advance(task) {
     }
     task.pageSignature = ids;
     task.searchUrl = (await chrome.tabs.get(task.searchTab)).url;
-    const product = result.products.find(item => !task.seen.includes(item.id));
+    const product = result.products.find(item => !task.seen.includes(item.id) && !task.excluded?.includes(item.id));
     if (!product) {
       if (result.last) return done(task, '搜索结果已读完，未达到目标。');
       if (!result.next) return wait(task, '找不到可确认的下一页按钮，请检查搜索结果。');
@@ -142,14 +155,21 @@ async function advance(task) {
     task.phase = 'questions';
     const rows = mergeRows(task.rows, result.rows);
     if (!rows) return wait(task, '无法核对已读问答的位置，请检查问答面板。');
-    const added = rows.slice(task.rows.length);
-    task.questions.push(...added.slice(0, task.target - task.questions.length).map(row => row.text));
-    task.rows = rows;
-    if (task.questions.length === task.target) {
-      finishProduct(task, false);
-      return done(task, '已达到目标。');
+    const source = result.source;
+    if (source.title) {
+      task.questions = task.questions.map(row => row.productId === source.productId &&
+        (row.titleChecked !== 3 || row.title !== source.title) ? {...row, ...source} : row);
     }
-    if (result.end || (result.total !== null && rows.length >= result.total)) return finishProduct(task, false);
+    const savedSource = task.questions.find(row => row.productId === source.productId && row.titleChecked === 3 && row.title);
+    const offset = task.offset ?? task.rows.length;
+    const added = rows.slice(offset, offset + task.target - task.questions.length);
+    task.questions.push(...added.map(row => ({text:row.text, ...source, title:source.title || savedSource?.title || ''})));
+    task.rows = rows;
+    task.offset = offset + added.length;
+    if (task.offset === rows.length && (result.end ||
+        (result.total !== null && rows.length >= result.total))) finishProduct(task, false);
+    if (task.questions.length === task.target) return done(task, '已达到目标。');
+    if (task.phase === 'search') return;
     // The count in the header may include questions absent from the visible list.
     task.bottomChecks = !added.length && rows.length && result.bottom && !result.loading
       ? (task.bottomChecks || 0) + 1 : 0;
@@ -215,15 +235,26 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         } catch {}
       }
       task = {status:'running', reason:'', phase:'search', searchTab:tab.id, productTab:reusable,
-        searchUrl:tab.url, target:message.target, questions:[], seen:[], rows:[], noQuestions:0, waits:0, emptyChecks:0};
+        searchUrl:tab.url, target:message.target, questions:[], seen:[], excluded:[], rows:[], offset:0, noQuestions:0, waits:0, emptyChecks:0};
     } else if (!task) throw Error('请先开始采集。');
     else if (message.action === 'pause' && task.status === 'running') pause(task, '已手动暂停。');
     else if (message.action === 'stop' && task.status !== 'done') done(task, '已手动停止。');
+    else if (message.action === 'delete-product') {
+      const id = message.productId;
+      if (typeof id !== 'string' || !task.questions.some(row => row.productId === id)) {
+        throw Error('该商品已不在结果中。');
+      }
+      task.questions = task.questions.filter(row => row.productId !== id);
+      task.excluded = [...new Set([...(task.excluded || []), id])];
+      if (task.item?.id === id) finishProduct(task, false);
+      task.refill = true;
+      pause(task, '已删除该商品的问题。可手动继续补采。');
+    }
     else if (message.action === 'resume' && task.status === 'paused') {
       if (task.needsSort && !message.sorted) throw Error('请先确认销量排序。');
       if (task.needsSort) task.sortConfirmed = true;
       task.needsSort = false;
-      if (task.interrupted) {
+      if (task.interrupted || task.refill) {
         let current;
         const tabs = await chrome.tabs.query({url:'https://s.taobao.com/*'});
         const original = tabs.find(tab => tab.id === task.searchTab && tab.url === task.searchUrl);
@@ -231,19 +262,25 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
         const candidate = original || (matches.length === 1 ? matches[0] : null);
         try { if (candidate) current = await inspect(candidate.id, 'search'); } catch {}
         if (!current?.products?.length || (task.pageSignature && signature(current.products) !== task.pageSignature)) {
-          task.status = 'restart';
+          task.status = task.refill ? 'paused' : 'restart';
           task.reason = '无法确认原位置。可先复制已有结果，再打开搜索结果页重新开始。';
           await save(task);
           return;
         }
         task.searchTab = candidate.id;
-        if (task.item) task.phase = 'navigate';
-        task.productTab = undefined;
+        let currentProduct;
+        try { currentProduct = await chrome.tabs.get(task.productTab); } catch {}
+        if (task.interrupted || (task.item && currentProduct?.url !== task.item.url &&
+            new URL(currentProduct?.url || 'about:blank').searchParams.get('id') !== task.item.id)) {
+          if (task.item) task.phase = 'navigate';
+          if (task.interrupted) task.productTab = undefined;
+        }
         task.interrupted = false;
       }
       task.waits = 0;
       task.emptyChecks = 0;
       task.bottomChecks = 0;
+      task.refill = false;
       task.status = 'running';
       task.reason = '';
     } else throw Error('当前任务无法执行该操作。');

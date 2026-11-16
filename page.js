@@ -110,6 +110,23 @@ globalThis.inspectTaobao = async (step, scroll = false) => {
   const loading = document.readyState !== 'complete' ||
     Boolean(elements(drawer, '[aria-busy=true],[class*="Loading--"],[class*="loading--"]').length) ||
     Boolean(textNodes(drawer, /^(加载中[.…。]*|正在加载[.…。]*)$/).length);
-  return {rows, total:totalText ? Number(totalText) : null, bottom, loading,
+  // Taobao renders the same title in its product panel and sticky header.
+  // The inner span excludes adjacent promotional badges and contains the full text.
+  const normalize = text => text?.replace(/\s+/g, ' ').trim() || '';
+  const titleNodes = elements(document, 'div[class^="ItemTitle--"] div[class^="MainTitle--"] > span[class^="mainTitle--"]');
+  const titles = new Set(titleNodes.filter(node =>
+    !drawer.contains(node) && !node.closest('aside,dialog,[role=dialog],[class*="tabDetailItem--"]'))
+    .map(node => {
+      const visibleText = normalize(label(node));
+      const fullText = normalize(node.getAttribute('title'));
+      if (!visibleText) return '';
+      const clipped = visibleText.replace(/(?:…|\.\.\.)$/, '').trimEnd();
+      if (fullText && (visibleText === fullText || (clipped && clipped !== visibleText && fullText.startsWith(clipped)))) {
+        return fullText;
+      }
+      return clipped === visibleText ? visibleText : '';
+    }).filter(Boolean));
+  const productTitle = titles.size === 1 ? [...titles][0] : '';
+  return {rows, productTitle, total:totalText ? Number(totalText) : null, bottom, loading,
     end:Boolean(textNodes(drawer, /^(没有更多了|暂无更多|已显示全部)$/).length)};
 };

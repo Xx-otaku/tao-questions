@@ -10,6 +10,7 @@
     <label for="target">目标条数</label>
     <input id="target" type="number" value="100" min="1" step="1" required>
     <button id="primary" class="primary" type="submit">开始</button>
+    <button id="new-task" type="button" hidden>新任务</button>
     <button id="stop" type="button" hidden>停止</button>
   </form>
   <div class="progress-label"><strong id="status">等待开始</strong><output id="count">0 / 100</output></div>
@@ -19,7 +20,7 @@
 </header>
 <main aria-label="已采集的问题">
   <p id="empty">采集到的问题会按顺序出现在这里。</p>
-  <ol id="questions"></ol>
+  <div id="questions"></div>
 </main>
 <script type="module" src="panel.js"></script>
 </html>

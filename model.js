@@ -18,5 +18,6 @@ export function mergeRows(previous, rows) {
   return null;
 }
 export const signature = products => products.map(product => product.id).join(',');
-export const plainText = questions => questions.map(text => text.replace(/\r\n?|\n/g, ' ')).join('\n');
+export const questionText = question => typeof question === 'string' ? question : question.text;
+export const plainText = questions => questions.map(question => questionText(question).replace(/\r\n?|\n/g, ' ')).join('\n');
 export const validTarget = target => Number.isSafeInteger(target) && target > 0;
